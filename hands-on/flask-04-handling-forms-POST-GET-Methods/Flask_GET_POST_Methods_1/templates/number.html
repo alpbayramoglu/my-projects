@@ -7,8 +7,11 @@
     <title>Document</title>
 </head>
 <body>
-    <h1>The first number is {{ value1 }}</h1>
-    <h1>The second number is {{ value2 }}</h1>
-    <h1>The multiplication of {{ value1 }} and {{ value2 }}  is {{ value3 }}</h1>
+    {% if total %}
+    <h2>Total of three numbers is {{ total }}</h2>
+    {% else %}
+    <h2>Since this is GET request, Total hasn't been calculated</h2>
+    {% endif %}
+
 </body>
 </html>
