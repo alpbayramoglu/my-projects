@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: |
+  
+Parameters:
+
+  pbKN:
+    Description: Select your Key Pair
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: firstkey
+
+  pbVPC:
+    Description: Select VPC
+    Type: AWS::EC2::VPC::Id
+
+  pbSubnets:
+    Description: Select Subnets
+    Type: List<AWS::EC2::Subnet::Id> 
+
+
+Resources:
+
+  pbDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: "20"
+      DBInstanceClass: "db.t2.micro" # Required
+      DBName: "clarusway_phonebook"
+      Engine: "MySQL"
+      EngineVersion: "8.0.19"
+      MasterUserPassword: "Alp123456"
+      MasterUsername: "Alp"
+      Port: "3306"
+      PubliclyAccessible: true
+      StorageEncrypted: false
+      DeleteAutomatedBackups: true
+      VPCSecurityGroups:
+        - !GetAtt pbDBsg.GroupId  
+
+  pbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions: # Required
+        - Type: forward
+          TargetGroupArn: !Ref pbTG 
+      LoadBalancerArn: !Ref pbALB # Required
+      Port: 80
+      Protocol: HTTP   
+
+  pbALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      SecurityGroups:
+        - !GetAtt pbALBsg.GroupId 
+      Subnets: !Ref pbSubnets  
+      Type: application    
+
+  pbASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AvailabilityZones: !GetAZs 
+      DesiredCapacity: "2"
+      HealthCheckGracePeriod: 90
+      HealthCheckType: ELB
+      LaunchTemplate:
+        LaunchTemplateId: !Ref pbLT
+        Version: "1"
+      MaxSize: "3" # Required
+      MinSize: "1" # Required
+      TargetGroupARNs:
+        - !Ref pbTG
+
+  pbCPUPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref pbASG  # Required
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 60.0
+
+  pbLT:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId: ami-01cc34ab2709337aa
+        InstanceType: t2.micro
+        KeyName: !Ref pbKN
+        SecurityGroupIds:
+          - !GetAtt pbSG.GroupId        
+        UserData:
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #!/bin/bash
+                yum update -y
+                yum install python3 -y
+                pip3 install flask
+                pip3 install flask-mysql
+                pip3 install sqlalchemy
+                pip3 install Flask-SQLAlchemy
+                cd /home/ec2-user
+                echo "${RDSend}" > dbserver.endpoint
+                chmod 777 dbserver.endpoint
+                wget https://raw.githubusercontent.com/alpbayramoglu/my-projects/main/projects/aws/Project-004-Phonebook-Application/phonebook-app.py
+                mkdir templates
+                cd templates
+                wget https://raw.githubusercontent.com/alpbayramoglu/my-projects/main/projects/aws/Project-004-Phonebook-Application/templates/add-update.html
+                wget https://raw.githubusercontent.com/alpbayramoglu/my-projects/main/projects/aws/Project-004-Phonebook-Application/templates/delete.html  
+                wget https://raw.githubusercontent.com/alpbayramoglu/my-projects/main/projects/aws/Project-004-Phonebook-Application/templates/index.html
+                cd ..
+                python3 phonebook-app.py
+              - RDSend: !GetAtt pbDB.Endpoint.Address
+
+  pbTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref pbVPC 
+
+  pbDBsg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow connections only from Webserver
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        SourceSecurityGroupId: !GetAtt pbSG.GroupId
+
+  pbALBsg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enables SSH and HTTP" # Required
+      SecurityGroupIngress:
+        -   CidrIp: 0.0.0.0/0
+            FromPort: 22
+            ToPort: 22
+            IpProtocol: tcp
+        -   CidrIp: 0.0.0.0/0
+            FromPort: 80
+            ToPort: 80
+            IpProtocol: tcp
+      VpcId: !Ref pbVPC
+
+  pbSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enables SSH and HTTP to ALB" # Required
+      SecurityGroupIngress:
+        -   CidrIp: 0.0.0.0/0
+            FromPort: 22
+            ToPort: 22
+            IpProtocol: tcp
+
+        -   SourceSecurityGroupId: !GetAtt pbALBsg.GroupId
+            FromPort: 80
+            ToPort: 80
+            IpProtocol: tcp
+      VpcId: !Ref pbVPC
+
+
+Outputs:
+  AppUrl:
+    Description: Url of the ALB
+    Value: !Join
+      - ""
+      - - "http://"
+        - !GetAtt pbALB.DNSName        
+
+  RDSEndPoint:
+    Description: 'The RDS Endpoint of MySQL DB'
+    Value: !GetAtt pbDB.Endpoint.Address
