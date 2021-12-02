@@ -59,3 +59,4 @@ Outputs:
       - PublicAddress: !GetAtt WebServerHost.PublicDnsName
     Description: Roman Numerals Converter Application URL        
 
+  
