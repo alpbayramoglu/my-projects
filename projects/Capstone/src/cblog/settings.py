@@ -85,7 +85,7 @@ WSGI_APPLICATION = 'cblog.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'capstone-devalps', # database name in RDS is written here
+        'NAME': 'capsDB', # database name in RDS is written here
         'USER': 'devalps', # database master username in RDS is written here
         'PASSWORD': config('PASSWORD'),
         'HOST': 'database-1.cve8st9f5k7u.us-east-1.rds.amazonaws.com',  # database endpoint is written here
